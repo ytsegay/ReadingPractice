@@ -2,6 +2,8 @@ import sys
 from math import sqrt
 from PIL import Image,ImageDraw
 
+import random
+
 
 def pearson(v1,v2):
     sum1=sum(v1)
@@ -157,13 +159,100 @@ def drawnode(draw,clust,x,y,scaling,labels):
         draw.text((x+5,y-7),clust.title,(0,0,0))
 
 
+
+
+
+def kMeansClustering(clusts, distance=pearson, k=4):
+
+    # create copies of randomly selected nodes to be the centroids
+    # TODO: there is a potential here that random can select the same
+    # node more than once as a centroid ... alas ... something to think
+    # about
+    centroids = []
+    for i in range(k):
+        randPos = random.randrange(0, len(clusts))
+        centroids.append(bnode(clusts[randPos].vec[:], clusts[randPos].title))
+
+    
+    prevBestMatches = {}
+    
+    # repeat the process 100 times
+    for f in range(100):
+        bestMatches = {}
+                
+        print 'Iteration #',f
+        
+        # for each node find the cluster that is closest match to it
+        for i in range(len(clusts)):
+            maxMatch = distance(clusts[i].vec, centroids[0].vec)
+            bestMatch = 0
+            
+            for j in range(1, k):
+                d =  distance(clusts[i].vec, centroids[j].vec)
+                                
+                # found a better match?
+                if d < maxMatch:
+                    maxMatch = d
+                    bestMatch = j
+                
+            # add the current node to the best matching cluster's
+            # list of candidates
+            bestMatches.setdefault(bestMatch, [])
+            bestMatches[bestMatch].append(i)
+        
+        # if the grouping of the nodes is done ... we have not seen
+        # a change in how the nodes are aligned then we are done
+        if bestMatches == prevBestMatches:
+            break;
+        
+        prevBestMatches = bestMatches
+        
+        # now each centroid needs to be adjusted so that it is at the center
+        # of that group. This is done by averaging the values of the feat vectors
+        # that a node contains        
+        for i in range(k):
+            # make space for the center/average centroid vec
+            newVec = [0.0]*len(clusts[0].vec)
+            bMatchPositions = bestMatches[i]
+            
+            for j in range(len(clusts[i].vec)):
+                # for each column 
+                colSum = 0.0
+                # in every node add the jth column
+                for s in bMatchPositions:
+                    colSum += clusts[s].vec[j]
+                newVec[j] = (colSum/len(bestMatches))
+            
+            centroids[i].vec = newVec[:]
+
+    return bestMatches
+
+    
+    
+# 
+
+
+
 def main():
     (rows, lex) = getBRows('blogVect.txt')
-    r = hClustering(rows, lex)
-    blognames = []
-    drawdendrogram(r,blognames,jpeg='blogclust.jpg')
-    printNodes(r, 0)
+    #r = hClustering(rows, lex)
+    #blognames = []
+    #drawdendrogram(r,blognames,jpeg='blogclust.jpg')
+    #printNodes(r, 0)
 
+
+    for c in range(len(rows)):
+        print '\t',c,'\t',rows[c].title
+    
+    groups = kMeansClustering(rows)
+    
+    print groups 
+    
+    for i,k in groups.items():
+        print 'Group ', str(i+1)
+        
+        for j in k:
+            print '\t',j,'\t', rows[j].title
 
 if __name__ == '__main__':
     main()
