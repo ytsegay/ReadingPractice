@@ -1,24 +1,8 @@
 import sys
 from math import sqrt
 from PIL import Image,ImageDraw
-
 import random
 
-
-def pearson(v1,v2):
-    sum1=sum(v1)
-    sum2=sum(v2)
-
-
-    sum1Sq=sum([pow(v,2) for v in v1])
-    sum2Sq=sum([pow(v,2) for v in v2])
-
-    pSum=sum([v1[i]*v2[i] for i in range(len(v1))])
-    
-    num=pSum-(sum1*sum2/len(v1))
-    den=sqrt((sum1Sq-pow(sum1,2)/len(v1))*(sum2Sq-pow(sum2,2)/len(v1)))
-    if den==0: return 0
-    return 1.0-num/den
 
 class bnode:
     def __init__(self, vec, title=None, left=None, right=None, distance=0.0, id='0'):
@@ -30,42 +14,113 @@ class bnode:
         self.title = title
 
 
-def getBRows(fileName):
+def pearson(v1,v2):
+    sum1=sum(v1)
+    sum2=sum(v2)
 
-    f = open(fileName, 'r')
-    header = f.next()
-    lexicon = header.strip().split("\t")[1:]
+    sum1Sq=sum([pow(v,2) for v in v1])
+    sum2Sq=sum([pow(v,2) for v in v2])
 
-    bNodes=[]
-
-    for line in f:
-        p = line.strip().split("\t")
-        vect = [float(n) for n in p[1:]]
-
-        newCt = bnode(vect, p[0])
-        bNodes.append(newCt)
-    f.close()
-
-    return (bNodes, lexicon)
+    pSum=sum([v1[i]*v2[i] for i in range(len(v1))])
+    
+    num=pSum-(sum1*sum2/len(v1))
+    den=sqrt((sum1Sq-pow(sum1,2)/len(v1))*(sum2Sq-pow(sum2,2)/len(v1)))
+    if den==0: return 0
+    return 1.0-num/den
 
 
+def kMeansClustering(clusts, distance=pearson, k=4):
+
+    # create copies of randomly selected nodes to be the centroids
+    # TODO: there is a potential here that random can select the same
+    # node more than once as a centroid ... alas ... something to think
+    # about
+    centroids = []
+    for i in range(k):
+        randPos = random.randrange(0, len(clusts))
+        centroids.append(bnode(clusts[randPos].vec[:], clusts[randPos].title))
+
+    
+    prevBestMatches = {}
+    
+    # repeat the process 100 times
+    for f in range(100):
+        bestMatches = {}
+                
+        print 'Iteration #',f
+        
+        # for each node find the cluster that is closest match to it
+        for i in range(len(clusts)):
+            maxMatch = distance(clusts[i].vec, centroids[0].vec)
+            bestMatch = 0
+            
+            for j in range(1, k):
+                d =  distance(clusts[i].vec, centroids[j].vec)
+                                
+                # found a better match?
+                if d < maxMatch:
+                    maxMatch = d
+                    bestMatch = j
+                
+            # add the current node to the best matching cluster's
+            # list of candidates
+            bestMatches.setdefault(bestMatch, [])
+            bestMatches[bestMatch].append(i)
+        
+        # if the grouping of the nodes is done ... we have not seen
+        # a change in how the nodes are aligned then we are done
+        if bestMatches == prevBestMatches:
+            break;
+        
+        prevBestMatches = bestMatches
+        
+        # now each centroid needs to be adjusted so that it is at the center
+        # of that group. This is done by averaging the values of the feat vectors
+        # that a node contains        
+        for i in range(k):
+            # make space for the center/average centroid vec
+            newVec = [0.0]*len(clusts[0].vec)
+            bMatchPositions = bestMatches[i]
+            
+            for j in range(len(clusts[i].vec)):
+                # for each column 
+                colSum = 0.0
+                # in every node add the jth column
+                for s in bMatchPositions:
+                    colSum += clusts[s].vec[j]
+                newVec[j] = (colSum/len(bestMatches))
+            
+            centroids[i].vec = newVec[:]
+
+    return bestMatches
 
 
-def hClustering(clusts, lexicon, distance=pearson):
 
+# hierarchical clustering 
+# 1. the idea to find the nearest two nodes pair ... 
+# 2. merge the pair into a new cluster node and the new node becomes the parent 
+# 3. 
+def hClustering(clusts, distance=pearson):
+
+    # nodes for merged pairs will have a -ve index
     clustsId = -1
+    # avoid recomputing previously computed distances
     clusterPairScore = {}
 
     for i in range(len(clusts)):
         clusts[i].id = i
 
+    # while there are nodes not yet clustered
     while(len(clusts) > 1):
+        
         lowestD = distance(clusts[0].vec, clusts[1].vec)
         lowest = (0,1)
 
+        # find the pair with the lowest distance
         for i in range(len(clusts)):
             for j in range(i+1, len(clusts)):
-                
+               
+                # cache pair distances 
                 if (clusts[i].id, clusts[j].id) not in clusterPairScore:
                     d = distance(clusts[i].vec, clusts[j].vec)
                     clusterPairScore[(clusts[i].id, clusts[j].id)] = d
@@ -76,12 +131,9 @@ def hClustering(clusts, lexicon, distance=pearson):
                     lowestD = d
                     lowest = (i,j)
 
-
         # get average of i and j
         averageVect = [(clusts[lowest[0]].vec[m] + clusts[lowest[1]].vec[m])/2 for m in range(len(clusts[i].vec))]
         newClust = bnode(averageVect, left = clusts[lowest[0]], right = clusts[lowest[1]], distance=d, id=clustsId)
-
-        #print 'poping out ', lowest[0], ' ', lowest[1], ' length ', len(clusts)
 
         # remove both entries
         del clusts[lowest[1]]
@@ -92,6 +144,41 @@ def hClustering(clusts, lexicon, distance=pearson):
         clustsId -= 1
 
     return clusts[0]
+
+
+
+
+
+
+
+
+def readRows(fileName):
+
+    f = open(fileName, 'r')
+    header = f.next()
+    
+    # lexicon ...
+    headers = header.strip().split("\t")[1:]
+
+    # nodes
+    bNodes=[]
+    for line in f:
+        p = line.strip().split("\t")
+        vect = [float(n) for n in p[1:]]
+
+        newCt = bnode(vect, p[0])
+        bNodes.append(newCt)
+    f.close()
+
+    return (bNodes, headers)
+
+
+
+
+
+
+
+
 
 
 def printNodes(root, n=0):
@@ -161,86 +248,22 @@ def drawnode(draw,clust,x,y,scaling,labels):
 
 
 
-
-def kMeansClustering(clusts, distance=pearson, k=4):
-
-    # create copies of randomly selected nodes to be the centroids
-    # TODO: there is a potential here that random can select the same
-    # node more than once as a centroid ... alas ... something to think
-    # about
-    centroids = []
-    for i in range(k):
-        randPos = random.randrange(0, len(clusts))
-        centroids.append(bnode(clusts[randPos].vec[:], clusts[randPos].title))
-
-    
-    prevBestMatches = {}
-    
-    # repeat the process 100 times
-    for f in range(100):
-        bestMatches = {}
-                
-        print 'Iteration #',f
-        
-        # for each node find the cluster that is closest match to it
-        for i in range(len(clusts)):
-            maxMatch = distance(clusts[i].vec, centroids[0].vec)
-            bestMatch = 0
-            
-            for j in range(1, k):
-                d =  distance(clusts[i].vec, centroids[j].vec)
-                                
-                # found a better match?
-                if d < maxMatch:
-                    maxMatch = d
-                    bestMatch = j
-                
-            # add the current node to the best matching cluster's
-            # list of candidates
-            bestMatches.setdefault(bestMatch, [])
-            bestMatches[bestMatch].append(i)
-        
-        # if the grouping of the nodes is done ... we have not seen
-        # a change in how the nodes are aligned then we are done
-        if bestMatches == prevBestMatches:
-            break;
-        
-        prevBestMatches = bestMatches
-        
-        # now each centroid needs to be adjusted so that it is at the center
-        # of that group. This is done by averaging the values of the feat vectors
-        # that a node contains        
-        for i in range(k):
-            # make space for the center/average centroid vec
-            newVec = [0.0]*len(clusts[0].vec)
-            bMatchPositions = bestMatches[i]
-            
-            for j in range(len(clusts[i].vec)):
-                # for each column 
-                colSum = 0.0
-                # in every node add the jth column
-                for s in bMatchPositions:
-                    colSum += clusts[s].vec[j]
-                newVec[j] = (colSum/len(bestMatches))
-            
-            centroids[i].vec = newVec[:]
-
-    return bestMatches
-
     
     
-# 
+
 
 
 
 def main():
     (rows, lex) = getBRows('blogVect.txt')
+    
     #r = hClustering(rows, lex)
     #blognames = []
     #drawdendrogram(r,blognames,jpeg='blogclust.jpg')
     #printNodes(r, 0)
 
 
+    # kmean clustering ...
     for c in range(len(rows)):
         print '\t',c,'\t',rows[c].title
     
