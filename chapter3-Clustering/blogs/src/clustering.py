@@ -147,41 +147,9 @@ def hClustering(clusts, distance=pearson):
 
 
 
-
-
-
-
-
-def readRows(fileName):
-
-    f = open(fileName, 'r')
-    header = f.next()
-    
-    # lexicon ...
-    headers = header.strip().split("\t")[1:]
-
-    # nodes
-    bNodes=[]
-    for line in f:
-        p = line.strip().split("\t")
-        vect = [float(n) for n in p[1:]]
-
-        newCt = bnode(vect, p[0])
-        bNodes.append(newCt)
-    f.close()
-
-    return (bNodes, headers)
-
-
-
-
-
-
-
-
-
-
-def printNodes(root, n=0):
+# prints the hierarchical tree structure 
+# not that useful as the tree gets bigger
+def printHClusterTree(root, n=0):
     for i in range(n): print ' ',
 
     if root.id < 0:
@@ -191,6 +159,66 @@ def printNodes(root, n=0):
 
     if root.left != None: printNodes(root.left, n+1)
     if root.right != None: printNodes(root.right, n+1)
+
+
+
+
+
+def readFeatVect(fileName):
+
+    f = open(fileName, 'r')
+    header = f.next()
+    
+    # feature names/ids
+    featureNames = header.strip().split("\t")[1:]
+
+    # nodes
+    bNodes=[]
+    for line in f:
+        p = line.strip().split("\t")
+        
+        vect = [float(n) for n in p[1:]]
+        
+        if len(vect) <= 0: continue
+        assert len(vect) == len(featureNames)
+        
+        newCt = bnode(vect, p[0])
+        bNodes.append(newCt)
+    f.close()
+
+    return (bNodes, featureNames)
+
+
+
+def hCluster(fileName, outputFileName='blogclust.jpg'):
+    (rows, lex) = readFeatVect(fileName)
+    root = hClustering(rows)
+
+    #printHClusterTree(root, 0)
+
+    # TODO: clean the graphical drawing of this     
+    drawdendrogram(root,jpeg=outputFileName)
+
+
+
+def kCluster(fileName):
+    (rows, lex) = readFeatVect(fileName)
+    
+    # print the original list of candidate entries to be clustered
+    for i in range(len(rows)):
+        print '\t',i,'\t',rows[i].title
+    
+    k = 4
+    groups = kMeansClustering(rows,k)
+    
+    print '\n\nKMeans clustering with k=',k 
+    for i,k in groups.items():
+        print 'Group ', str(i+1)
+        
+        for j in k:
+            print '\t',j,'\t', rows[j].title
+
+
 
 
 
@@ -206,7 +234,7 @@ def getdepth(clust):
     return max(getdepth(clust.left),getdepth(clust.right))+clust.distance
 
 
-def drawdendrogram(clust,labels,jpeg='clusters.jpg'):
+def drawdendrogram(clust,jpeg='clusters.jpg'):
     # height and width
     h=getheight(clust)*20
     w=1200
@@ -218,12 +246,12 @@ def drawdendrogram(clust,labels,jpeg='clusters.jpg'):
     draw=ImageDraw.Draw(img)
     draw.line((0,h/2,10,h/2),fill=(255,0,0))
     # Draw the first node
-    drawnode(draw,clust,10,(h/2),scaling,labels)
+    drawnode(draw,clust,10,(h/2),scaling)
     img.save(jpeg,'JPEG')
 
 
 
-def drawnode(draw,clust,x,y,scaling,labels):
+def drawnode(draw,clust,x,y,scaling):
     if clust.id<0:
         h1=getheight(clust.left)*20
         h2=getheight(clust.right)*20
@@ -239,8 +267,8 @@ def drawnode(draw,clust,x,y,scaling,labels):
         draw.line((x,bottom-h2/2,x+ll,bottom-h2/2),fill=(255,0,0))
         
         # Call the function to draw the left and right nodes
-        drawnode(draw,clust.left,x+ll,top+h1/2,scaling,labels)
-        drawnode(draw,clust.right,x+ll,bottom-h2/2,scaling,labels)
+        drawnode(draw,clust.left,x+ll,top+h1/2,scaling)
+        drawnode(draw,clust.right,x+ll,bottom-h2/2,scaling)
     else:
         # If this is an endpoint, draw the item label
         draw.text((x+5,y-7),clust.title,(0,0,0))
@@ -255,27 +283,12 @@ def drawnode(draw,clust,x,y,scaling,labels):
 
 
 def main():
-    (rows, lex) = getBRows('blogVect.txt')
+    #kCluster('blogVect.txt')
+    hCluster('blogVect.txt')
     
-    #r = hClustering(rows, lex)
-    #blognames = []
-    #drawdendrogram(r,blognames,jpeg='blogclust.jpg')
-    #printNodes(r, 0)
-
-
-    # kmean clustering ...
-    for c in range(len(rows)):
-        print '\t',c,'\t',rows[c].title
+    hCluster('zebo.txt', 'zeboclust.jpg')
+    #kCluster('zebo.txt')
     
-    groups = kMeansClustering(rows)
-    
-    print groups 
-    
-    for i,k in groups.items():
-        print 'Group ', str(i+1)
-        
-        for j in k:
-            print '\t',j,'\t', rows[j].title
 
 if __name__ == '__main__':
     main()
