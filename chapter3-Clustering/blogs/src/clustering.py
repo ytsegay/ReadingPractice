@@ -1,16 +1,15 @@
-import sys
-from math import sqrt
-from PIL import Image,ImageDraw
+from math import sqrt,fabs
 import random
+from PIL import Image,ImageDraw
 
 
 class bnode:
-    def __init__(self, vec, title=None, left=None, right=None, distance=0.0, id='0'):
+    def __init__(self, vec, title=None, left=None, right=None, distance=0.0, nId='0'):
         self.left = left
         self.vec = vec
         self.right = right
         self.distance = distance
-        self.id = id
+        self.id = nId
         self.title = title
 
 
@@ -28,17 +27,36 @@ def pearson(v1,v2):
     if den==0: return 0
     return 1.0-num/den
 
+# 
+def tanamato(v1,v2):
+    shr,c1,c2=0,0,0
+        
+    for i in range(len(v1)):
+        if v1[i] != 0: c1 += 1
+        if v2[i] != 0: c2 += 1
+        if v1[i] != 0 and v2[i] != 0: shr += 1
+        
+        
+    denom = (c1+c2-shr)
+    return 1.0 - (shr/denom)
+
+
+def manhattan(v1, v2):
+    manhatSum = 0.0
+    for i in range(len(v1)):
+        manhatSum +=  fabs(v1[i]-v2[i])
+    
+    return manhatSum
+
+
 
 def kMeansClustering(clusts, distance=pearson, k=4):
-
-    # create copies of randomly selected nodes to be the centroids
-    # TODO: there is a potential here that random can select the same
-    # node more than once as a centroid ... alas ... something to think
-    # about
     centroids = []
     for i in range(k):
         randPos = random.randrange(0, len(clusts))
+        
         centroids.append(bnode(clusts[randPos].vec[:], clusts[randPos].title))
+        print randPos
 
     
     prevBestMatches = {}
@@ -56,6 +74,7 @@ def kMeansClustering(clusts, distance=pearson, k=4):
             
             for j in range(1, k):
                 d =  distance(clusts[i].vec, centroids[j].vec)
+                centroids[j].vec
                                 
                 # found a better match?
                 if d < maxMatch:
@@ -80,6 +99,7 @@ def kMeansClustering(clusts, distance=pearson, k=4):
         for i in range(k):
             # make space for the center/average centroid vec
             newVec = [0.0]*len(clusts[0].vec)
+            
             bMatchPositions = bestMatches[i]
             
             for j in range(len(clusts[i].vec)):
@@ -94,6 +114,76 @@ def kMeansClustering(clusts, distance=pearson, k=4):
 
     return bestMatches
 
+
+# a special version of the kMeansClustering function to answer
+# question 5 in the book
+def kMeansClusteringWithWeights(clusts, distance=pearson, k=4):
+
+    # create copies of randomly selected nodes to be the centroids
+    # TODO: there is a potential here that random can select the same
+    # node more than once as a centroid ... alas ... something to think
+    # about
+    centroids = []
+    for i in range(k):
+        randPos = random.randrange(0, len(clusts))
+        
+        centroids.append(bnode(clusts[randPos].vec[:], clusts[randPos].title))
+        print randPos
+
+    prevBestMatches = {}
+    
+    # repeat the process 100 times
+    for f in range(100):
+        bestMatches = {}
+                
+        print 'Iteration #',f
+        
+        # for each node find the cluster that is closest match to it
+        for i in range(len(clusts)):
+            maxMatch = distance(clusts[i].vec, centroids[0].vec)
+            bestMatch = 0
+            
+            for j in range(1, k):
+                d =  distance(clusts[i].vec, centroids[j].vec)
+                centroids[j].vec
+                                
+                # found a better match?
+                if d < maxMatch:
+                    maxMatch = d
+                    bestMatch = j
+                
+            # add the current node to the best matching cluster's
+            # list of candidates
+            bestMatches.setdefault(bestMatch, [])
+            bestMatches[bestMatch].append((i,maxMatch))
+        
+        # if the grouping of the nodes is done ... we have not seen
+        # a change in how the nodes are aligned then we are done
+        if bestMatches == prevBestMatches:
+            break;
+        
+        prevBestMatches = bestMatches
+        
+        # now each centroid needs to be adjusted so that it is at the center
+        # of that group. This is done by averaging the values of the feat vectors
+        # that a node contains        
+        for i in range(k):
+            # make space for the center/average centroid vec
+            newVec = [0.0]*len(clusts[0].vec)
+            
+            bMatchPositions = bestMatches[i]
+            
+            for j in range(len(clusts[i].vec)):
+                # for each column 
+                colSum = 0.0
+                # in every node add the jth column
+                for s in bMatchPositions:
+                    colSum += clusts[s[0]].vec[j]
+                newVec[j] = (colSum/len(bestMatches))
+            
+            centroids[i].vec = newVec[:]
+
+    return bestMatches
 
 
 # hierarchical clustering 
@@ -133,7 +223,7 @@ def hClustering(clusts, distance=pearson):
 
         # get average of i and j
         averageVect = [(clusts[lowest[0]].vec[m] + clusts[lowest[1]].vec[m])/2 for m in range(len(clusts[i].vec))]
-        newClust = bnode(averageVect, left = clusts[lowest[0]], right = clusts[lowest[1]], distance=d, id=clustsId)
+        newClust = bnode(averageVect, left = clusts[lowest[0]], right = clusts[lowest[1]], distance=d, nId=clustsId)
 
         # remove both entries
         del clusts[lowest[1]]
@@ -157,8 +247,8 @@ def printHClusterTree(root, n=0):
 
     if root.title != None: print root.title
 
-    if root.left != None: printNodes(root.left, n+1)
-    if root.right != None: printNodes(root.right, n+1)
+    if root.left != None: printHClusterTree(root.left, n+1)
+    if root.right != None: printHClusterTree(root.right, n+1)
 
 
 
@@ -190,9 +280,9 @@ def readFeatVect(fileName):
 
 
 
-def hCluster(fileName, outputFileName='blogclust.jpg'):
-    (rows, lex) = readFeatVect(fileName)
-    root = hClustering(rows)
+def hCluster(fileName, outputFileName='blogclust.jpg', distance=pearson):
+    rows = readFeatVect(fileName)[0]
+    root = hClustering(rows, distance)
 
     #printHClusterTree(root, 0)
 
@@ -200,18 +290,41 @@ def hCluster(fileName, outputFileName='blogclust.jpg'):
     drawdendrogram(root,jpeg=outputFileName)
 
 
-
-def kCluster(fileName):
-    (rows, lex) = readFeatVect(fileName)
+# a special version of the kCluster function to answer
+# question 5 in the book
+def kClusterWithWeight(fileName, distance=pearson):
+    rows = readFeatVect(fileName)[0]
     
     # print the original list of candidate entries to be clustered
     for i in range(len(rows)):
         print '\t',i,'\t',rows[i].title
     
-    k = 4
-    groups = kMeansClustering(rows,k)
+    clustersCount = 4
+    groups = kMeansClusteringWithWeights(rows, distance, k=clustersCount)
     
-    print '\n\nKMeans clustering with k=',k 
+    print groups
+    
+    print '\n\nKMeans clustering with k=',clustersCount 
+    for i,k in groups.items():
+        print 'Group ', str(i+1)
+        
+        for j in k:
+            print '\t',j[0],'\t', rows[j[0]].title,'\t',j[1]
+
+
+
+
+def kCluster(fileName, distance=pearson):
+    rows = readFeatVect(fileName)[0]
+    
+    # print the original list of candidate entries to be clustered
+    for i in range(len(rows)):
+        print '\t',i,'\t',rows[i].title
+    
+    clustersCount = 4
+    groups = kMeansClustering(rows, distance, k=clustersCount)
+    
+    print '\n\nKMeans clustering with k=',clustersCount 
     for i,k in groups.items():
         print 'Group ', str(i+1)
         
@@ -240,7 +353,7 @@ def drawdendrogram(clust,jpeg='clusters.jpg'):
     w=1200
     depth=getdepth(clust)
     # width is fixed, so scale distances accordingly
-    scaling=float(w-200)/depth
+    scaling=float(w-150)/depth
     # Create a new image with a white background
     img=Image.new('RGB',(w,h),(255,255,255))
     draw=ImageDraw.Draw(img)
@@ -248,7 +361,6 @@ def drawdendrogram(clust,jpeg='clusters.jpg'):
     # Draw the first node
     drawnode(draw,clust,10,(h/2),scaling)
     img.save(jpeg,'JPEG')
-
 
 
 def drawnode(draw,clust,x,y,scaling):
@@ -265,7 +377,7 @@ def drawnode(draw,clust,x,y,scaling):
         draw.line((x,top+h1/2,x+ll,top+h1/2),fill=(255,0,0))
         # Horizontal line to right item
         draw.line((x,bottom-h2/2,x+ll,bottom-h2/2),fill=(255,0,0))
-        
+       
         # Call the function to draw the left and right nodes
         drawnode(draw,clust.left,x+ll,top+h1/2,scaling)
         drawnode(draw,clust.right,x+ll,bottom-h2/2,scaling)
@@ -283,11 +395,15 @@ def drawnode(draw,clust,x,y,scaling):
 
 
 def main():
-    #kCluster('blogVect.txt')
-    hCluster('blogVect.txt')
+
+    #hCluster('blogVect.txt', distance=tanamato, outputFileName='tanamatoBlogs.jpg')
+    #hCluster('blogVect.txt', outputFileName='pearsonBlogs.jpg')
+    #hCluster('blogVect.txt', distance=manhattan, outputFileName='manhattanBlogs.jpg')
     
-    hCluster('zebo.txt', 'zeboclust.jpg')
-    #kCluster('zebo.txt')
+    
+    #hCluster('zebo.txt', distance=tanamato, outputFileName='tanamatoZabo.jpg')
+    #hCluster('zebo.txt', outputFileName='pearsonZabo.jpg')
+    kClusterWithWeight('zebo.txt')
     
 
 if __name__ == '__main__':
